@@ -41,7 +41,7 @@ sub new ($class, %args) {
     return bless {
         http => $http, token => $token, clock => $clock,
         schedule => $schedule, on_error => $on_error,
-        queue => [], active => undef, wake => undef, disabled => 0,
+        queue => [], active => undef, wake => undef, wake_at => undef, disabled => 0,
         routes => {}, blocked_until => {}, global_until => 0,
         dispatched => [],
     }, $class;
@@ -162,15 +162,22 @@ sub _pump ($self) {
         my $now = $self->{clock}->();
         my $delay = $self->_delay($req, $now);
         if ($delay > 0) {
-            if (!$self->{wake}) {
+            my $deadline = $now + $delay;
+            # A different queue head may have an earlier or later deadline.
+            # Never leave its work stranded behind the previous head's timer.
+            if (!defined($self->{wake_at})
+                || abs($self->{wake_at} - $deadline) > 0.000001) {
+                if (my $cancel = delete $self->{wake}) { $cancel->() }
+                $self->{wake_at} = $deadline;
                 $self->{wake} = $self->{schedule}->($delay, sub {
-                    $self->{wake} = undef;
+                    delete @{$self}{qw(wake wake_at)};
                     $self->_pump;
                 });
             }
             return;
         }
         if (my $cancel = delete $self->{wake}) { $cancel->() }
+        delete $self->{wake_at};
         shift @{ $self->{queue} };
         $req->{state} = 'active';
         $self->{active} = $req;
@@ -179,6 +186,7 @@ sub _pump ($self) {
         return;
     }
     if (my $cancel = delete $self->{wake}) { $cancel->() }
+    delete $self->{wake_at};
 }
 
 sub _cancel_queued ($self, $req) {

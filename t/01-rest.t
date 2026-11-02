@@ -313,4 +313,36 @@ sub fixture {
     $http->complete(201, '{"id":"2"}');
 }
 
+
+{
+    my ($d, $http, $advance) = fixture();
+    $d->rest->get('/channels/{channel.id}/messages',
+        'channel.id' => 111, on_response => sub {});
+    $http->complete(200, '[]',
+        'X-RateLimit-Bucket' => 'same-route-bucket',
+        'X-RateLimit-Remaining' => '0',
+        'X-RateLimit-Reset-After' => '10');
+    $d->rest->get('/channels/{channel.id}/messages',
+        'channel.id' => 222, on_response => sub {});
+    $http->complete(200, '[]',
+        'X-RateLimit-Bucket' => 'same-route-bucket',
+        'X-RateLimit-Remaining' => '0',
+        'X-RateLimit-Reset-After' => '2');
+
+    my $first = $d->rest->get('/channels/{channel.id}/messages',
+        'channel.id' => 111, on_response => sub {});
+    my $second = $d->rest->get('/channels/{channel.id}/messages',
+        'channel.id' => 222, on_response => sub {});
+    is($second->state, 'queued', 'second blocked request is queued');
+    $first->cancel;
+    ok($first->is_terminal, 'first blocked request cancels immediately');
+    my $before = scalar @{ $http->{calls} };
+    $advance->(1.5);
+    is(scalar @{ $http->{calls} }, $before, 'new head still waits before its reset');
+    $advance->(0.5);
+    is(scalar @{ $http->{calls} }, $before + 1,
+        'cancel changes queue head and reschedules earlier timer');
+    $http->complete(200, '[]');
+}
+
 done_testing();
