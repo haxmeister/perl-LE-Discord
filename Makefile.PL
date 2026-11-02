@@ -13,7 +13,7 @@ WriteMakefile(
     MIN_PERL_VERSION => '5.036000',
     PREREQ_PM => {
         'Linux::Event'       => '0.117',
-        'Linux::Event::HTTP' => '0.005',
+        'Linux::Event::HTTP' => '0.004',
         'JSON::PP' => 0,
         'URI::Escape' => 0,
         'Time::HiRes' => 0,
