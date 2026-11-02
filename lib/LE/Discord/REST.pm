@@ -313,8 +313,17 @@ sub _deliver ($self, $req, $data, $error) {
     my $cb = $error ? ($req->{on_error} // $self->{on_error})
                     : $req->{on_response};
     if ($cb) {
-        eval { $cb->($error // $data); 1 }
-            or warn "LE::Discord callback failed\n";
+        my $ok = eval { $cb->($error // $data); 1 };
+        unless ($ok) {
+            my $reason = $@ || 'unknown exception';
+            # Callback errors may contain application data. Do not leak the
+            # bot credential through our diagnostic output.
+            my $token = $self->{token};
+            $reason =~ s/\Q$token\E/[REDACTED]/g
+                if defined($token) && length($token);
+            chomp $reason;
+            warn "LE::Discord callback failed: $reason\n";
+        }
     } elsif ($error) {
         warn "$error\n";
     }

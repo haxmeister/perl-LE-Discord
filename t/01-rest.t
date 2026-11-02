@@ -329,12 +329,16 @@ sub fixture {
         'X-RateLimit-Remaining' => '0',
         'X-RateLimit-Reset-After' => '2');
 
+    my $cancelled;
     my $first = $d->rest->get('/channels/{channel.id}/messages',
-        'channel.id' => 111, on_response => sub {});
+        'channel.id' => 111,
+        on_response => sub {},
+        on_error => sub ($error) { $cancelled = $error });
     my $second = $d->rest->get('/channels/{channel.id}/messages',
         'channel.id' => 222, on_response => sub {});
     is($second->state, 'queued', 'second blocked request is queued');
     $first->cancel;
+    is($cancelled->kind, 'cancelled', 'expected queued cancellation is handled');
     ok($first->is_terminal, 'first blocked request cancels immediately');
     my $before = scalar @{ $http->{calls} };
     $advance->(1.5);
@@ -343,6 +347,22 @@ sub fixture {
     is(scalar @{ $http->{calls} }, $before + 1,
         'cancel changes queue head and reschedules earlier timer');
     $http->complete(200, '[]');
+}
+
+
+{
+    my ($d, $http) = fixture();
+    my @warnings;
+    local $SIG{__WARN__} = sub { push @warnings, @_ };
+    $d->rest->get('/users/@me',
+        on_response => sub ($result) { die "failed on purpose: test-only-token"; });
+    $http->complete(200, '{"id":"123"}');
+    is(scalar @warnings, 1, 'a callback exception is reported once');
+    like($warnings[0], qr/LE::Discord callback failed: failed on purpose:/,
+        'the original callback error is visible');
+    unlike($warnings[0], qr/test-only-token/,
+        'bot token is redacted from callback exceptions');
+    like($warnings[0], qr/\[REDACTED\]/, 'redaction marker is present');
 }
 
 done_testing();
