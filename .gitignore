@@ -1,0 +1,25 @@
+# Local secrets and test configuration
+.env
+.env.*
+!.env.example
+*.local
+
+# Perl build output
+blib/
+_build/
+_build_params
+Build
+MYMETA.json
+MYMETA.yml
+Makefile
+Makefile.old
+pm_to_blib
+*.bs
+*.o
+*.so
+*.bak
+*.swp
+*.swo
+
+# Local logs
+*.log
