@@ -70,7 +70,7 @@ $discord->rest->post(
 );
 ```
 
-Callback conventions and method names remain provisional until we check `Linux::Event::HTTP::Client` directly.
+Callback conventions were checked against the current `Linux::Event::HTTP::Client` source; this implementation uses its completed `on_response` and terminal `on_finish` semantics.
 
 ## Tests and completion criteria
 

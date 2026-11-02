@@ -192,4 +192,39 @@ sub fixture {
     is(scalar @{ $http->{calls} }, 1, '401 prevents subsequent dispatch');
 }
 
+
+{
+    my ($d, $http, $advance) = fixture();
+    $d->rest->get('/users/@me', on_response => sub {});
+    $d->rest->get('/users/@me', on_response => sub {});
+    $http->complete(200, '{"id":"1"}',
+        'X-RateLimit-Bucket' => 'sample-bucket',
+        'X-RateLimit-Remaining' => '0',
+        'X-RateLimit-Reset-After' => '2.0');
+    is(scalar @{ $http->{calls} }, 1, 'empty bucket delays next request');
+    $advance->(1.5);
+    is(scalar @{ $http->{calls} }, 1, 'bucket still blocked before reset');
+    $advance->(0.5);
+    is(scalar @{ $http->{calls} }, 2, 'bucket resumes at reset');
+    $http->complete(200, '{"id":"2"}');
+}
+{
+    my ($d, $http) = fixture();
+    my $error;
+    my $op = $d->rest->get('/users/@me',
+        on_error => sub ($err) { $error = $err });
+    $op->cancel;
+    is($error->kind, 'cancelled', 'active cancellation delivered');
+    ok($op->is_terminal, 'cancelled active operation terminates');
+}
+{
+    my ($d, $http) = fixture();
+    $d->rest->put('/channels/{channel.id}/messages/{message.id}/reactions/{emoji.id}/@me',
+        'channel.id' => 111, 'message.id' => 222, 'emoji.id' => 'name:333',
+        on_response => sub {});
+    like($http->{calls}[0]{url}, qr{/reactions/name%3A333/\@me\z},
+        'path values are URL-encoded individually');
+    $http->complete(204, '');
+}
+
 done_testing();
