@@ -2,7 +2,7 @@
 
 A planned Discord bot client built directly on the **Linux::Event** ecosystem.
 
-**Status:** research and planning. There is no bot client implementation in this repository yet.
+**Status:** first REST-only implementation on [feature/rest-mvp-foundation](https://github.com/haxmeister/perl-LE-Discord/tree/feature/rest-mvp-foundation). Not yet verified against live Discord.
 
 The intent is an approachable Perl interface to Discord without a framework-neutral intermediary or a second event loop. The eventual client will use `Linux::Event::HTTP` for Discord REST calls and `Linux::Event::WebSocket` for Gateway traffic.
 
@@ -10,7 +10,7 @@ The intent is an approachable Perl interface to Discord without a framework-neut
 
 Begin with a **REST-only, outbound bot** that uses a bot token to identify itself and send one message to a configured test channel. This is intentionally smaller than an interactive bot. It lets us test the real Discord API and our HTTP integration before adding Gateway sessions and incoming events.
 
-See [the proposed first milestone](docs/FIRST-MILESTONE.md) for setup, scope, trade-offs, and acceptance criteria.
+See [the first milestone](docs/FIRST-MILESTONE.md) for setup and acceptance criteria, and [REST design](docs/REST-DESIGN.md) for the public API and scheduling lifecycle.
 
 ## Research
 
@@ -22,8 +22,21 @@ See [the proposed first milestone](docs/FIRST-MILESTONE.md) for setup, scope, tr
 - A simple application-facing API; keep networking and event-loop integration explicit and predictable.
 - Separate Discord REST policy from the HTTP transport; similarly, separate Gateway state from the WebSocket transport.
 - Prefer lightweight objects. Preserve Snowflake IDs as decimal strings. Never silently fetch additional objects.
-- Explore generating routine REST endpoint definitions from a pinned Discord OpenAPI revision **after** the smallest working bot is verified. The specification is preview-quality, not a substitute for Discord's written documentation.
+- Accept Discord's documented REST routes and named placeholders directly. The first milestone needs no OpenAPI route registry or endpoint-specific methods.
 - Keep potentially reusable pieces (queues, timer scheduling, rate-limit mechanics, schema accessors) internally separable, but do not extract another distribution without a demonstrated second use case.
 - Use previous SDKs as research, not source to copy without a specific license and compatibility review.
 
 This repository already contains an MIT `LICENSE`. No credentials should ever be committed.
+
+## REST interface (first implementation)
+
+```perl
+$discord->rest->post(
+    '/channels/{channel.id}/messages',
+    'channel.id' => $channel_id,
+    json => { content => 'Hello from Perl!' },
+    on_response => sub ($message) { say $message->{id} },
+);
+```
+
+Using a test bot, run `perl -Ilib examples/rest_hello.pl identify` to request bot identity. Sending a message is a separate, explicit `send` command and requires `DISCORD_CHANNEL_ID`. These live tests are not yet verified. The implementation currently schedules one request at a time.

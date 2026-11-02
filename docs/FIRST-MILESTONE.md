@@ -1,6 +1,6 @@
 # First milestone: real Discord REST connection
 
-**Status: proposal for discussion, not implemented.**
+**Status: first REST implementation committed on feature/rest-mvp-foundation; offline tests added but not executed with the complete Linux::Event stack; live verification outstanding.**
 
 ## Decision proposed: REST first
 
@@ -44,44 +44,30 @@ For repeated manual tests, make sending deliberate (explicit `send` command or e
 ## Proposed minimal implementation
 
 - `LE::Discord`: stores the Loop and bot token, without creating its own Loop.
-- `LE::Discord::REST` (internal): one nonblocking HTTP request path backed by `Linux::Event::HTTP::Client`.
-- One **example** (`examples/rest_hello.pl`, proposed), using the same Loop, first `get_current_user`, then `create_message` or a convenience `send_message`.
+- `LE::Discord::REST`: documented-route GET/POST/PUT/PATCH/DELETE, backed by `Linux::Event::HTTP::Client`, with named placeholders.
+- `examples/rest_hello.pl`: `GET /users/@me` followed by an optional explicit `POST /channels/{channel.id}/messages`.
 - JSON encode/decode, request headers, explicit HTTP statuses and errors; no silent synchronous HTTP calls.
 - Preserve received Snowflakes as decimal strings. Raw hashes are sufficient for milestone one; object classes are not required to prove the transport.
 - Carefully separate HTTP status failures (401, 403, 404, 429, 5xx) from connection/TLS errors. 401 should fail closed; 403 should explain permission failure; 429 must respect `Retry-After` or the JSON `retry_after` and must not loop aggressively.
-- A single serial request chain is enough for the first experiment. Comprehensive bucket-aware queueing belongs in the subsequent REST reliability milestone before adding wide concurrent REST usage.
+- The first implementation uses a single in-flight request and a FIFO queue with response-driven bucket waits, a conservative global submission budget, and bounded 429 retries. Concurrent bucket scheduling remains a later milestone.
 - Keep the bot token out of logs, error bodies where possible, and test fixtures.
 
-**Illustrative application-facing shape (NOT implemented):**
+**Application-facing interface implemented on the feature branch (not live-verified):**
 
 ```perl
-my $bot = LE::Discord->new(
-    loop  => $loop,
-    token => $ENV{DISCORD_BOT_TOKEN},
-);
-
-$bot->get_current_user(
-    on_response => sub ($user) {
-        say "Authenticated as ", $user->{username};
-        $bot->send_message(
-            channel_id => $ENV{DISCORD_CHANNEL_ID},
-            content    => "Hello from LE::Discord",
-            on_response => sub ($message) {
-                say "Sent message ", $message->{id};
-                $loop->stop;
-            },
-            on_error => sub ($error) {
-                warn "$error\n";
-                $loop->stop;
-            },
-        );
+$discord->rest->post(
+    '/channels/{channel.id}/messages',
+    'channel.id' => $ENV{DISCORD_CHANNEL_ID},
+    json => { content => 'Hello from LE::Discord' },
+    on_response => sub ($message) {
+        say "Sent message $message->{id}";
+        $loop->stop;
     },
     on_error => sub ($error) {
         warn "$error\n";
         $loop->stop;
     },
 );
-$loop->run;
 ```
 
 Callback conventions and method names remain provisional until we check `Linux::Event::HTTP::Client` directly.
@@ -113,3 +99,5 @@ Should the first visible output be a one-shot **send-and-exit** program (recomme
 - https://docs.discord.com/developers/resources/message
 - https://docs.discord.com/developers/topics/rate-limits
 - https://docs.discord.com/developers/events/gateway
+
+For the current implementation and deferred work, see [REST-DESIGN.md](REST-DESIGN.md).
