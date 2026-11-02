@@ -181,6 +181,16 @@ sub _pump ($self) {
     if (my $cancel = delete $self->{wake}) { $cancel->() }
 }
 
+sub _cancel_queued ($self, $req) {
+    return unless $req->{state} eq 'queued';
+    my @remaining = grep { $_ != $req } @{ $self->{queue} };
+    $self->{queue} = \@remaining;
+    $self->_deliver($req, undef, LE::Discord::Error->new(
+        kind => 'cancelled', message => 'request cancelled'));
+    $self->_pump unless $self->{active};
+    return;
+}
+
 sub _dispatch ($self, $req) {
     my @headers = (
         ['Authorization', 'Bot ' . $self->{token}],
@@ -251,8 +261,9 @@ sub _finish ($self, $req) {
             my $global = ($scope eq 'global'
                 || lc($res->header('x-ratelimit-global') // '') eq 'true'
                 || (ref($data) eq 'HASH' && $data->{global}));
-            if (defined($retry) && $retry <= 3600 && $req->{attempts} < 2) {
-                ++$req->{attempts};
+            if (defined($retry) && $retry <= 3600) {
+                # Discord's limit still applies after this request has exhausted
+                # its retry budget; other queued requests must respect it.
                 my $until = $now + $retry;
                 if ($global) {
                     $self->{global_until} = $until if $until > $self->{global_until};
@@ -260,11 +271,14 @@ sub _finish ($self, $req) {
                     $self->{blocked_until}{$key} = $until
                         if $until > ($self->{blocked_until}{$key} // 0);
                 }
-                delete @{$req}{qw(response transport transport_error)};
-                $req->{state} = 'queued';
-                unshift @{ $self->{queue} }, $req;
-                $self->_pump;
-                return;
+                if ($req->{attempts} < 2) {
+                    ++$req->{attempts};
+                    delete @{$req}{qw(response transport transport_error)};
+                    $req->{state} = 'queued';
+                    unshift @{ $self->{queue} }, $req;
+                    $self->_pump;
+                    return;
+                }
             }
         }
         if ($status == 401) { $self->{disabled} = 1 }

@@ -9,7 +9,7 @@ sub cancel ($self) {
     if ($self->{state} eq 'active') {
         $self->{transport}->cancel if $self->{transport};
     } else {
-        $self->{rest}->_pump;
+        $self->{rest}->_cancel_queued($self);
     }
     return;
 }

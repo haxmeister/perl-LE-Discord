@@ -227,4 +227,45 @@ sub fixture {
     $http->complete(204, '');
 }
 
+
+{
+    my ($d, $http) = fixture();
+    my ($error, $count);
+    $d->rest->get('/users/@me', on_response => sub { $count++ });
+    my $pending = $d->rest->get('/channels/{channel.id}',
+        'channel.id' => 19, on_error => sub ($e) { $error = $e });
+    $pending->cancel;
+    is($error->kind, 'cancelled', 'queued cancel completes immediately, even with active request');
+    ok($pending->is_terminal, 'cancelled queued handle is already terminal');
+    is(scalar @{ $http->{calls} }, 1, 'cancelled queued request never starts');
+    $http->complete(200, '{"id":"123"}');
+    is($count, 1, 'earlier active request still completes normally');
+    is(scalar @{ $http->{calls} }, 1, 'no extra request after cancellation');
+}
+{
+    my ($d, $http, $advance) = fixture();
+    my ($error, $second);
+    $d->rest->get('/users/@me', on_error => sub ($e) { $error = $e });
+    $d->rest->get('/users/@me', on_response => sub ($v) { $second = $v });
+    for my $attempt (1..3) {
+        $http->complete(429, '{"retry_after":1,"global":true}',
+            'Retry-After' => '1',
+            'X-RateLimit-Scope' => 'global');
+        is(scalar @{ $http->{calls} }, $attempt,
+            "429 attempt $attempt does not dispatch the next request immediately");
+        if ($attempt < 3) {
+            $advance->(1);
+            is(scalar @{ $http->{calls} }, $attempt + 1, 'bounded retry dispatched after one second');
+        }
+    }
+    is($error->status, 429, 'third 429 finishes original request with an error');
+    is(scalar @{ $http->{calls} }, 3, 'exhausted retry still holds queued work');
+    $advance->(0.5);
+    is(scalar @{ $http->{calls} }, 3, 'remaining global delay respected');
+    $advance->(0.5);
+    is(scalar @{ $http->{calls} }, 4, 'next request starts only after global delay');
+    $http->complete(200, '{"id":"after-limit"}');
+    is($second->{id}, 'after-limit', 'subsequent queued request succeeds');
+}
+
 done_testing();
