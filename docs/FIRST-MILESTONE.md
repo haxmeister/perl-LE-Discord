@@ -1,6 +1,6 @@
 # First milestone: real Discord REST connection
 
-**Status: first REST implementation committed on feature/rest-mvp-foundation; offline tests added but not executed with the complete Linux::Event stack; live verification outstanding.**
+**Status: first REST implementation committed on feature/rest-mvp-foundation; offline tests passed in GitHub Actions on 2026-11-02 using a fake HTTP transport; integration with the installed Linux::Event::HTTP stack and live Discord verification remain outstanding.**
 
 ## Decision proposed: REST first
 
