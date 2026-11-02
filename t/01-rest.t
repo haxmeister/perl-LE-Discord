@@ -268,4 +268,49 @@ sub fixture {
     is($second->{id}, 'after-limit', 'subsequent queued request succeeds');
 }
 
+
+{
+    my ($d, $http, $advance) = fixture();
+    # Different methods can share a Discord-assigned bucket. The route
+    # templates must be retained until the server teaches us that mapping.
+    $d->rest->get('/channels/{channel.id}/messages',
+        'channel.id' => 111, on_response => sub {});
+    $http->complete(200, '[]',
+        'X-RateLimit-Bucket' => 'shared-method-bucket',
+        'X-RateLimit-Remaining' => '1');
+    $d->rest->post('/channels/{channel.id}/messages',
+        'channel.id' => 111,
+        json => { content => 'hello' }, on_response => sub {});
+    $http->complete(201, '{"id":"42"}',
+        'X-RateLimit-Bucket' => 'shared-method-bucket',
+        'X-RateLimit-Remaining' => '0',
+        'X-RateLimit-Reset-After' => '3');
+    my $count = scalar @{ $http->{calls} };
+    $d->rest->get('/channels/{channel.id}/messages',
+        'channel.id' => 111, on_response => sub {});
+    is(scalar @{ $http->{calls} }, $count,
+        'learned shared bucket blocks a different method');
+    $advance->(3);
+    is(scalar @{ $http->{calls} }, $count + 1,
+        'shared bucket permits request at reset');
+    $http->complete(200, '[]');
+}
+{
+    my ($d, $http) = fixture();
+    $d->rest->post('/channels/{channel.id}/messages',
+        'channel.id' => 111,
+        json => { content => 'one' }, on_response => sub {});
+    $http->complete(201, '{"id":"1"}',
+        'X-RateLimit-Bucket' => 'per-channel-bucket',
+        'X-RateLimit-Remaining' => '0',
+        'X-RateLimit-Reset-After' => '30');
+    my $count = scalar @{ $http->{calls} };
+    $d->rest->post('/channels/{channel.id}/messages',
+        'channel.id' => 222,
+        json => { content => 'two' }, on_response => sub {});
+    is(scalar @{ $http->{calls} }, $count + 1,
+        'exhausting one channel does not block another major resource');
+    $http->complete(201, '{"id":"2"}');
+}
+
 done_testing();
