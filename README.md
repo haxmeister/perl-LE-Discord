@@ -40,3 +40,25 @@ $discord->rest->post(
 ```
 
 Using a test bot, run `perl -Ilib examples/rest_hello.pl identify` to request bot identity. Sending a message is a separate, explicit `send` command and requires `DISCORD_CHANNEL_ID`. Both commands succeeded against the real Discord API on 2026-11-02. The implementation currently schedules one request at a time. For long-running programs, call `$discord->rest->shutdown` before exiting to cancel outstanding requests and release owned HTTP resources.
+
+## Webhook message sending (feature branch)
+
+The [feature/webhook-send](https://github.com/haxmeister/perl-LE-Discord/tree/feature/webhook-send) branch adds webhook message sending without installing a bot or providing a bot token:
+
+```perl
+use LE::Discord::Webhook;
+
+my $webhook = LE::Discord::Webhook->new(
+    loop => $loop,
+    url => $ENV{DISCORD_WEBHOOK_URL},
+);
+$webhook->execute(
+    json => {
+        content => 'Server news',
+        allowed_mentions => { parse => [] },
+    },
+    on_response => sub ($message) { say $message->{id} },
+);
+```
+
+It reuses the REST rate-limit scheduler and defaults to Discord's `wait=true` confirmation mode. This feature has not yet been tested against a live webhook. See [webhook design and setup](docs/WEBHOOKS.md) for the current scope, credentials, and future Discord-to-application events.

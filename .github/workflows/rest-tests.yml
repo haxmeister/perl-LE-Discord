@@ -1,7 +1,7 @@
 name: Perl offline tests
 on:
   push:
-    branches: [feature/rest-mvp-foundation]
+    branches: ['feature/**']
   pull_request:
 jobs:
   test:
