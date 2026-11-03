@@ -85,7 +85,7 @@ application public key and accepts signed PINGs and events via
 
 Run `perl -Ilib examples/webhook_events_local_test.pl` to test the
 receiver against a real localhost Linux::Event HTTP server and client.
-CryptX is required for this receiver but not for bot REST or webhook
-message sending. See [webhook-event receiver](docs/WEBHOOK-EVENTS.md).
+CryptX is a required dependency of LE::Discord, installed with the
+rest of the distribution. See [webhook-event receiver](docs/WEBHOOK-EVENTS.md).
 This is separate
 from sending to a webhook URL and from interaction webhooks.

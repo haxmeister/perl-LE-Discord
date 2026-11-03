@@ -96,9 +96,9 @@ invalid signature. It checks the response statuses and that only the
 valid event reached the application callback. No public endpoint,
 Discord token, or access to the Internet is required.
 
-`Crypt::PK::Ed25519` is optional for the existing bot REST and
-webhook-sender features; install CryptX to use the event receiver or
-run its tests. The GitHub Actions workflow installs CryptX for tests.
+CryptX (`Crypt::PK::Ed25519`) is a required LE::Discord dependency.
+It is declared in `Makefile.PL` and installed with the distribution.
+The GitHub Actions workflow also installs CryptX to run its tests.
 
 ## Future work
 
