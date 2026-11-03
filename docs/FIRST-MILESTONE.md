@@ -1,6 +1,6 @@
 # First milestone: real Discord REST connection
 
-**Status: first REST implementation committed on feature/rest-mvp-foundation; offline tests passed in GitHub Actions on 2026-11-02 using a fake HTTP transport; integration with the installed Linux::Event::HTTP stack and live Discord verification remain outstanding.**
+**Status: live REST smoke test succeeded on 2026-11-02. The developer ran `GET /users/@me` (bot identity returned) and `POST /channels/{channel.id}/messages` (Discord returned a created message ID and the requested channel ID). Offline tests passed in GitHub Actions. Connection/operation cleanup and broader error/rate-limit behavior still require live or integration verification.**
 
 ## Decision proposed: REST first
 
@@ -52,7 +52,7 @@ For repeated manual tests, make sending deliberate (explicit `send` command or e
 - The first implementation uses a single in-flight request and a FIFO queue with response-driven bucket waits, a conservative global submission budget, and bounded 429 retries. Concurrent bucket scheduling remains a later milestone.
 - Keep the bot token out of logs, error bodies where possible, and test fixtures.
 
-**Application-facing interface implemented on the feature branch (not live-verified):**
+**Application-facing interface implemented on the feature branch (live-verified for a message POST):**
 
 ```perl
 $discord->rest->post(
@@ -71,6 +71,16 @@ $discord->rest->post(
 ```
 
 Callback conventions were checked against the current `Linux::Event::HTTP::Client` source; this implementation uses its completed `on_response` and terminal `on_finish` semantics.
+
+## Live smoke-test results (2026-11-02)
+
+Using the developer's local Linux installation and test bot:
+
+- `perl -Ilib examples/rest_hello.pl identify`: authenticated and returned the bot's username and Snowflake ID.
+- `perl -Ilib examples/rest_hello.pl send`: authenticated, submitted a channel message, and received a created Message ID and the expected destination channel ID.
+- An initial `HTTP 403 Missing Access` was resolved through Discord server/channel access configuration; the same command then succeeded.
+
+The bot token and private test configuration are not stored in this repository. This confirms the basic end-to-end HTTPS and JSON REST path; it does not independently validate rate-limit exhaustion, parallel request handling, shutdown/cleanup, or the Gateway.
 
 ## Tests and completion criteria
 
