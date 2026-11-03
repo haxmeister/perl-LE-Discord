@@ -330,8 +330,11 @@ sub _finish ($self, $req) {
             }
         }
         # Discord explicitly warns not to keep sending to a 404 webhook.
-        # Stop this sender from accumulating invalid requests.
-        if ($status == 401 || ($status == 404 && $self->{auth_mode} eq 'webhook')) {
+        # A missing individual message is not a missing webhook, so do
+        # not disable the entire sender for message-specific 404s.
+        if ($status == 401
+            || ($status == 404 && $self->{auth_mode} eq 'webhook'
+                && $req->{route} eq '/webhooks/{webhook.id}/{webhook.token}')) {
             $self->{disabled} = 1;
         }
         if ($status < 200 || $status >= 300) {

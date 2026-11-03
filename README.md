@@ -62,3 +62,14 @@ $webhook->execute(
 ```
 
 It reuses the REST rate-limit scheduler and defaults to Discord's `wait=true` confirmation mode. A live webhook send was confirmed on November 2, 2026. See [webhook design and setup](docs/WEBHOOKS.md) for the current scope, credentials, and future Discord-to-application events.
+
+## Webhook management
+
+Bot REST routes already support webhook creation, listing, inspection,
+modification, and deletion, subject to Discord permissions. Token-based
+webhook inspection and message editing/deletion are available through
+`LE::Discord::Webhook` on the `feature/webhook-management` branch.
+
+See [Webhook management](docs/WEBHOOK-MANAGEMENT.md). Work on batching
+Vendetta Online player-sighting notifications is recorded as a future
+idea in [webhook notes](docs/WEBHOOKS.md), not implemented yet.

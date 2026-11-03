@@ -41,12 +41,28 @@ sub execute ($self, %args) {
     # wait=true requests confirmation and returns a Message object. Discord
     # otherwise defaults to 204 with no confirmation that a message was saved.
     $query = { wait => 'true', %$query };
-    return $self->{rest}->post(
-        '/webhooks/{webhook.id}/{webhook.token}',
+    return $self->_request('POST', '', query => $query, %args);
+}
+
+# The suffix is relative to the webhook-token route. Keep this
+# intentionally restricted to Discord's documented token operations.
+# Callers do not have to repeat or handle their webhook credentials.
+sub get    ($self, $suffix, %args) { $self->_request('GET',    $suffix, %args) }
+sub patch  ($self, $suffix, %args) { $self->_request('PATCH',  $suffix, %args) }
+sub delete ($self, $suffix, %args) { $self->_request('DELETE', $suffix, %args) }
+
+sub _request ($self, $method, $suffix, %args) {
+    croak 'invalid webhook-token route'
+        unless defined($suffix) && !ref($suffix)
+            && ($suffix eq '' || $suffix eq '/messages/{message.id}');
+    croak 'webhook credentials cannot be overridden'
+        if exists $args{'webhook.id'} || exists $args{'webhook.token'};
+    return $self->{rest}->request(
+        $method,
+        '/webhooks/{webhook.id}/{webhook.token}' . $suffix,
+        %args,
         'webhook.id' => $self->{id},
         'webhook.token' => $self->{token},
-        query => $query,
-        %args,
     );
 }
 
@@ -58,7 +74,7 @@ __END__
 
 =head1 NAME
 
-LE::Discord::Webhook - Send messages to a Discord webhook without a bot
+LE::Discord::Webhook - Use Discord webhook-token routes without a bot
 
 =head1 SYNOPSIS
 
@@ -116,8 +132,18 @@ Only official C<https://discord.com/api/webhooks/...> and
 C<https://discord.com/api/v10/webhooks/...> URLs are accepted.
 Keep webhook URLs private; they contain a secret token.
 
-This first version sends webhook messages. Receiving Discord webhook
-events, webhook management, interaction responses, and multipart
+Webhook-token operations are also available through C<get>, C<patch>,
+and C<delete>. Supply the suffix relative to the webhook-token route:
+C<''> for the webhook itself, or C<'/messages/{message.id}'> with
+C<'message.id' =E<gt> $id> for a message created by the webhook.
+These methods do not send a Bot Authorization header. Deleting the
+webhook itself is irreversible; C<delete('')> must be used deliberately.
+
+Managing webhooks across channels or guilds, including creating new
+webhooks, requires bot REST calls and the appropriate Discord
+C<MANAGE_WEBHOOKS> permissions. See F<docs/WEBHOOK-MANAGEMENT.md>.
+
+Receiving Discord webhook events, interaction responses, and multipart
 uploads are separate future features.
 
 =cut

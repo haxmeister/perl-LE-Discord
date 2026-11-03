@@ -60,9 +60,30 @@ bounded HTTP 429 retries, cancellation, and invalid webhook handling.
 This initial live smoke test does not establish high-volume rate-limit
 behavior, cross-process coordination, or incoming event handling.
 
+## Webhook management
+
+Webhook administration is separate from sending. Bot-authenticated
+creation and management use the ordinary documented route interface,
+without adding endpoint-specific methods to the REST API. A webhook
+URL can also authorize scoped operations on that individual webhook
+and its messages, through C<LE::Discord::Webhook>.
+
+See [Webhook management](WEBHOOK-MANAGEMENT.md) for routes, permissions,
+non-destructive examples, and safe testing.
+
+## Future idea: batch player sighting messages
+
+For Vendetta Online player-sighting notifications, collect events for a
+short configurable window (initial proposal: two seconds), group them
+by sector, optionally collapse repeated player sightings, then send
+one combined webhook message instead of one request per sighting.
+Split messages at Discord payload limits and flush on maximum size.
+Keep generic event/message batching separate from the Vendetta-specific
+sector aggregation. Reuse the existing webhook rate limiter and do
+not discard distinct sightings. **Idea only; not part of this release.**
+
 ## Later webhook work
 
-- Bot-authenticated webhook management (create, inspect, edit, delete).
 - Receiving Discord webhook events using Linux::Event::HTTP::Server and signature verification.
 - Interaction webhooks for slash commands and other interactions.
 - Multipart file uploads and attachment support.
