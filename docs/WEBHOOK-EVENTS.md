@@ -80,6 +80,26 @@ The initial tests use locally generated Ed25519 keys and fake
 requests/transactions to verify signatures and responses. A real
 Discord endpoint test still requires reachable HTTPS hosting.
 
+## Local HTTP integration test
+
+After the offline tests pass, run:
+
+```sh
+perl -Ilib examples/webhook_events_local_test.pl
+```
+
+This creates a temporary Ed25519 key in memory, binds a real
+`Linux::Event::HTTP::Server` to an automatically selected localhost
+port, and sends three HTTP requests using
+`Linux::Event::HTTP::Client`: a signed PING, a signed event, and an
+invalid signature. It checks the response statuses and that only the
+valid event reached the application callback. No public endpoint,
+Discord token, or access to the Internet is required.
+
+`Crypt::PK::Ed25519` is optional for the existing bot REST and
+webhook-sender features; install CryptX to use the event receiver or
+run its tests. The GitHub Actions workflow installs CryptX for tests.
+
 ## Future work
 
 - Receiving interaction webhooks (separate PING and callback semantics).

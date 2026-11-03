@@ -83,5 +83,9 @@ webhook event POSTs. It verifies Ed25519 signatures using the
 application public key and accepts signed PINGs and events via
 `Linux::Event::HTTP::Server`.
 
-See [webhook-event receiver](docs/WEBHOOK-EVENTS.md). This is separate
+Run `perl -Ilib examples/webhook_events_local_test.pl` to test the
+receiver against a real localhost Linux::Event HTTP server and client.
+CryptX is required for this receiver but not for bot REST or webhook
+message sending. See [webhook-event receiver](docs/WEBHOOK-EVENTS.md).
+This is separate
 from sending to a webhook URL and from interaction webhooks.
