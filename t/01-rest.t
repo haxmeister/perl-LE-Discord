@@ -445,4 +445,87 @@ sub fixture {
     }
 }
 
+
+# Bot-authorized webhook management uses the existing generic REST interface.
+{
+    my ($d, $http) = fixture();
+    my $result;
+    $d->rest->get('/channels/{channel.id}/webhooks',
+        'channel.id' => '123456789012345678',
+        on_response => sub ($data) { $result = $data });
+    is($http->{calls}[0]{method}, 'GET', 'list channel webhooks via GET');
+    is($http->{calls}[0]{url},
+        'https://discord.com/api/v10/channels/123456789012345678/webhooks',
+        'channel webhook list route expanded');
+    my %headers = map { lc($_->[0]) => $_->[1] } @{ $http->{calls}[0]{headers} };
+    is($headers{authorization}, 'Bot test-only-token',
+        'bot credentials used for webhook administration');
+    $http->complete(200, '[{"id":"123456789012345679","name":"Alerts"}]');
+    is($result->[0]{name}, 'Alerts', 'list response decoded as array');
+
+    $d->rest->get('/guilds/{guild.id}/webhooks',
+        'guild.id' => '999999999999999999',
+        on_response => sub {});
+    is($http->{calls}[1]{url},
+        'https://discord.com/api/v10/guilds/999999999999999999/webhooks',
+        'guild list route expanded');
+    $http->complete(200, '[]');
+
+    $d->rest->shutdown;
+}
+{
+    my ($d, $http) = fixture();
+    my $created;
+    $d->rest->post('/channels/{channel.id}/webhooks',
+        'channel.id' => '123456789012345678',
+        json => { name => 'Server announcements' },
+        on_response => sub ($data) { $created = $data });
+    is($http->{calls}[0]{method}, 'POST', 'create webhook via POST');
+    like($http->{calls}[0]{body}, qr/"name":"Server announcements"/,
+        'create passes documented webhook name');
+    $http->complete(200, '{"id":"987654321987654321","token":"never-log"}');
+    is($created->{id}, '987654321987654321', 'created webhook ID decoded');
+
+    my $inspected;
+    $d->rest->get('/webhooks/{webhook.id}',
+        'webhook.id' => $created->{id},
+        on_response => sub ($data) { $inspected = $data });
+    is($http->{calls}[1]{url},
+        'https://discord.com/api/v10/webhooks/987654321987654321',
+        'inspect webhook uses bot-authenticated URL');
+    $http->complete(200, '{"id":"987654321987654321","name":"Old name"}');
+    is($inspected->{name}, 'Old name', 'inspect response decoded');
+
+    my $updated;
+    $d->rest->patch('/webhooks/{webhook.id}',
+        'webhook.id' => $created->{id},
+        json => { name => 'New name' },
+        on_response => sub ($data) { $updated = $data });
+    is($http->{calls}[2]{method}, 'PATCH', 'bot can modify webhook');
+    like($http->{calls}[2]{body}, qr/"name":"New name"/,
+        'modify JSON encoded');
+    $http->complete(200, '{"name":"New name"}');
+    is($updated->{name}, 'New name', 'modified webhook returned');
+
+    my $deleted = 'not yet';
+    $d->rest->delete('/webhooks/{webhook.id}',
+        'webhook.id' => $created->{id},
+        on_response => sub ($data) { $deleted = $data });
+    is($http->{calls}[3]{method}, 'DELETE', 'bot can delete webhook');
+    $http->complete(204, '');
+    ok(!defined $deleted, 'webhook delete yields empty success');
+    $d->rest->shutdown;
+}
+{
+    my ($d, $http) = fixture();
+    my $error;
+    $d->rest->post('/channels/{channel.id}/webhooks',
+        'channel.id' => '123',
+        json => { name => 'No permission' },
+        on_error => sub ($e) { $error = $e });
+    $http->complete(403, '{"message":"Missing Permissions"}');
+    is($error->status, 403, 'webhook creation reports missing permissions');
+    $d->rest->shutdown;
+}
+
 done_testing();
