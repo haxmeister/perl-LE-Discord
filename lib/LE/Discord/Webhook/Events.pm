@@ -19,6 +19,9 @@ sub new ($class, %args) {
     my $on_event = delete $args{on_event}
         // croak 'on_event callback is required';
     croak 'on_event must be a coderef' unless ref($on_event) eq 'CODE';
+    my $on_ping = delete $args{on_ping};
+    croak 'on_ping must be a coderef'
+        if defined($on_ping) && ref($on_ping) ne 'CODE';
     my $on_error = delete $args{on_error};
     croak 'on_error must be a coderef'
         if defined($on_error) && ref($on_error) ne 'CODE';
@@ -37,7 +40,7 @@ sub new ($class, %args) {
 
     return bless {
         loop => $loop, key => $key, path => $path,
-        on_event => $on_event, on_error => $on_error,
+        on_event => $on_event, on_ping => $on_ping, on_error => $on_error,
         application_id => $application_id, max_body_bytes => $max_body_bytes,
     }, $class;
 }
@@ -82,7 +85,16 @@ sub handle ($self, $tx, $req) {
 
     # Discord's webhook-event PING (type 0) is not the same as
     # interaction PING (type 1). Both webhook PING and events return 204.
-    return _respond($tx, 204) if "$payload->{type}" eq '0';
+    if ("$payload->{type}" eq '0') {
+        _respond($tx, 204);
+        if (my $on_ping = $self->{on_ping}) {
+            $self->{loop}->defer(sub {
+                eval { $on_ping->($payload); 1 }
+                    or $self->_callback_failure;
+            });
+        }
+        return;
+    }
 
     return _respond($tx, 400)
         unless ref($payload->{event}) eq 'HASH'
@@ -98,14 +110,18 @@ sub handle ($self, $tx, $req) {
             1;
         };
         return if $ok;
-        if (my $cb = $self->{on_error}) {
-            eval { $cb->('Discord webhook event callback failed'); 1 }
-                or warn "LE::Discord webhook error callback failed\n";
-        } else {
-            warn "LE::Discord webhook event callback failed\n";
-        }
+        $self->_callback_failure;
     });
     return;
+}
+
+sub _callback_failure ($self) {
+    if (my $cb = $self->{on_error}) {
+        eval { $cb->('Discord webhook event callback failed'); 1 }
+            or warn "LE::Discord webhook error callback failed\n";
+    } else {
+        warn "LE::Discord webhook event callback failed\n";
+    }
 }
 
 sub _respond ($tx, $status) {
@@ -158,6 +174,10 @@ A signed webhook-event PING (C<type =E<gt> 0>) is acknowledged with
 HTTP 204 and an empty body. A signed event (C<type =E<gt> 1>) also
 receives HTTP 204. C<on_event($event, $payload)> is deferred to the
 next Linux::Event loop turn so it does not hold up the acknowledgement.
+An optional C<on_ping($payload)> callback is similarly deferred after
+a verified PING, which is useful for confirming live endpoint setup.
+Unsigned or invalidly signed requests never invoke it.
+
 The C<$event> argument is the inner event object containing C<type>,
 C<timestamp>, and C<data>. The second argument is the entire outer
 payload. Bad JSON and malformed payloads produce HTTP 400.

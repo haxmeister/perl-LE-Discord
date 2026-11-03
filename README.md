@@ -89,3 +89,11 @@ CryptX is a required dependency of LE::Discord, installed with the
 rest of the distribution. See [webhook-event receiver](docs/WEBHOOK-EVENTS.md).
 This is separate
 from sending to a webhook URL and from interaction webhooks.
+
+## Direct HTTPS webhook-event verification
+
+A public HTTPS endpoint can be served directly by Linux::Event, without
+a reverse proxy. The `examples/webhook_events_https.pl` example uses
+`Linux::Event::HTTP::Server` with a trusted TLS certificate and
+explicit bind address. See [direct HTTPS setup](docs/WEBHOOK-EVENTS.md)
+for the certificate, port-forwarding, and Discord Developer Portal steps.

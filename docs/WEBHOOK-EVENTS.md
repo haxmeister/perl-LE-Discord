@@ -80,6 +80,72 @@ The initial tests use locally generated Ed25519 keys and fake
 requests/transactions to verify signatures and responses. A real
 Discord endpoint test still requires reachable HTTPS hosting.
 
+## Direct HTTPS test with Discord
+
+A reverse proxy is **not required**. The library's HTTP server supports
+TLS directly. A sample direct listener is
+`examples/webhook_events_https.pl`. It requires all of the following:
+
+- A public DNS hostname you control, resolving to your public IP.
+- A trusted TLS certificate valid for that hostname, plus its matching
+  private key. For Let's Encrypt, use the `fullchain.pem` certificate
+  and `privkey.pem` private key. A self-signed certificate will not
+  pass public HTTPS validation.
+- Your app's **Public Key** from the Discord Developer Portal
+  (`DISCORD_PUBLIC_KEY`), **not** its bot token or the URL of a
+  message-sending webhook.
+- In your router/firewall, forward public **TCP 443** to the listening
+  host's port **8443** (or bind directly to port 443, if permitted).
+  Forward only the port you intend to test. NAT/CGNAT and upstream
+  firewalls can prevent external reachability.
+- An explicit bind address. Use `0.0.0.0` only when ready to receive
+  connections from outside your machine. This server accepts HTTPS;
+  do not expose the plain-HTTP example.
+
+Example environment setup (replace paths with your own certificate
+and key locations; never put secrets in the repository):
+
+```sh
+export DISCORD_PUBLIC_KEY='YOUR_APP_PUBLIC_KEY'
+export DISCORD_APPLICATION_ID='YOUR_APP_ID'
+export DISCORD_TLS_CERT_FILE='/path/to/fullchain.pem'
+export DISCORD_TLS_KEY_FILE='/path/to/privkey.pem'
+export DISCORD_EVENT_BIND_HOST='0.0.0.0'
+export DISCORD_EVENT_BIND_PORT=8443
+perl -Ilib examples/webhook_events_https.pl
+```
+
+On the public network, use the following URL in the Discord Developer
+Portal's **Webhooks → Endpoint** field:
+
+```text
+https://YOUR-HOSTNAME/discord/events
+```
+
+If forwarding **443 → 8443**, the URL does not need an explicit port.
+If you expose 8443 directly instead, its URL would include `:8443`,
+but use public 443 for the simplest Discord compatibility.
+
+Before configuring Discord, use a different network to verify that
+`curl -v https://YOUR-HOSTNAME/discord/events` negotiates trusted
+TLS and gets **HTTP 405** for an ordinary unsigned GET. That status
+is expected because only POST is accepted at this path.
+An unsigned POST must receive **401**. Don't disable certificate
+verification (no `curl -k`).
+
+In the Discord Developer Portal, choose your application, then
+**Webhooks**, paste the public URL as the endpoint and save.
+Discord immediately sends a signed PING. The example prints
+`Verified Discord webhook PING; acknowledged HTTP 204`
+when it validates and acknowledges that PING. Event subscriptions can
+then be enabled for the event types available to your application.
+If no events are triggered, no further output is expected.
+
+This is a short testing procedure, not production deployment guidance:
+keep the TLS key private, expose no unrelated routes, close the router
+forwarding/firewall rule after testing, and stop the listener. Real
+Discord event delivery is not yet verified by the repository tests.
+
 ## Local HTTP integration test
 
 After the offline tests pass, run:
