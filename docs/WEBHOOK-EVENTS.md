@@ -96,6 +96,18 @@ invalid signature. It checks the response statuses and that only the
 valid event reached the application callback. No public endpoint,
 Discord token, or access to the Internet is required.
 
+**Local verification completed November 2, 2026:** the developer
+ran `perl -Ilib examples/webhook_events_local_test.pl` on Linux and
+confirmed HTTP 204 for a signed PING, HTTP 204 for a signed event,
+HTTP 401 for an invalid signature, and exactly one application event
+callback. The example reported PASS. This validates the actual
+Linux::Event HTTP transport with the Ed25519 receiver, without
+exposing an endpoint to the Internet.
+
+The remaining integration milestone is a live Discord verification
+through a publicly accessible HTTPS endpoint. That has not yet been
+performed.
+
 CryptX (`Crypt::PK::Ed25519`) is a required LE::Discord dependency.
 It is declared in `Makefile.PL` and installed with the distribution.
 The GitHub Actions workflow also installs CryptX to run its tests.
