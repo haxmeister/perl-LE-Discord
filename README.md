@@ -1,8 +1,8 @@
 # LE::Discord
 
-A planned Discord bot client built directly on the **Linux::Event** ecosystem.
+A Discord bot client built directly on the **Linux::Event** ecosystem.
 
-**Status:** first REST-only implementation on [feature/rest-mvp-foundation](https://github.com/haxmeister/perl-LE-Discord/tree/feature/rest-mvp-foundation). On 2026-11-02, a real test bot successfully authenticated and created a message through the generic REST client. Further integration and cleanup validation remain.
+**Status:** first REST-only implementation on [feature/rest-mvp-foundation](https://github.com/haxmeister/perl-LE-Discord/tree/feature/rest-mvp-foundation). On 2026-11-02, a real test bot successfully authenticated and created a message through the generic REST client. Offline reliability tests are green; live shutdown and long-running operation still need verification.
 
 The intent is an approachable Perl interface to Discord without a framework-neutral intermediary or a second event loop. The eventual client will use `Linux::Event::HTTP` for Discord REST calls and `Linux::Event::WebSocket` for Gateway traffic.
 
@@ -39,4 +39,4 @@ $discord->rest->post(
 );
 ```
 
-Using a test bot, run `perl -Ilib examples/rest_hello.pl identify` to request bot identity. Sending a message is a separate, explicit `send` command and requires `DISCORD_CHANNEL_ID`. Both commands succeeded against the real Discord API on 2026-11-02. The implementation currently schedules one request at a time.
+Using a test bot, run `perl -Ilib examples/rest_hello.pl identify` to request bot identity. Sending a message is a separate, explicit `send` command and requires `DISCORD_CHANNEL_ID`. Both commands succeeded against the real Discord API on 2026-11-02. The implementation currently schedules one request at a time. For long-running programs, call `$discord->rest->shutdown` before exiting to cancel outstanding requests and release owned HTTP resources.

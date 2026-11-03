@@ -1,8 +1,8 @@
 # First milestone: real Discord REST connection
 
-**Status: live REST smoke test succeeded on 2026-11-02. The developer ran `GET /users/@me` (bot identity returned) and `POST /channels/{channel.id}/messages` (Discord returned a created message ID and the requested channel ID). Offline tests passed in GitHub Actions. Connection/operation cleanup and broader error/rate-limit behavior still require live or integration verification.**
+**Status: REST MVP live smoke test completed on 2026-11-02. `GET /users/@me` authenticated and `POST /channels/{channel.id}/messages` created a message. On 2026-11-02, 83 offline tests passed in GitHub Actions, including queued/active cancellation, rate limits, shutdown, and delayed HTTP completion. Live shutdown and extended operation remain unverified.**
 
-## Decision proposed: REST first
+## Decision: REST first
 
 The shortest meaningful live-Discord test is an **outbound-only bot** that authenticates with a bot token, retrieves its identity, and posts a message into a test channel. This exercises real bot authentication, HTTPS, asynchronous request/response, JSON, Snowflake IDs, and a Discord message response.
 
@@ -41,7 +41,7 @@ No Message Content privileged intent is needed merely to send a message via REST
 
 For repeated manual tests, make sending deliberate (explicit `send` command or explicit channel configuration), not a message sent automatically on every module load. Avoid uncontrolled posting on startup or after reconnect.
 
-## Proposed minimal implementation
+## First implementation
 
 - `LE::Discord`: stores the Loop and bot token, without creating its own Loop.
 - `LE::Discord::REST`: documented-route GET/POST/PUT/PATCH/DELETE, backed by `Linux::Event::HTTP::Client`, with named placeholders.
@@ -98,9 +98,9 @@ The bot token and private test configuration are not stored in this repository. 
 
 **Conveniences and coverage:** lightweight User/Message/Channel/Guild/Interaction objects, async reply helpers, pinned OpenAPI generation experiments, more endpoints. Only extract generic Linux::Event components when there is a demonstrated second user.
 
-## Open design choice for discussion
+## Chosen first program
 
-Should the first visible output be a one-shot **send-and-exit** program (recommended), or a running periodic notification bot? One-shot is safer, smaller, and a sufficient live API proof; continuous scheduling can follow after the REST transport is stable.
+The example is a one-shot, send-and-exit program. It sends only with the explicit `send` command. It calls `shutdown` after the event loop returns. Longer-running notification bots can follow separately.
 
 ## Relevant docs
 
