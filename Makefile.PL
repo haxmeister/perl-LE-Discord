@@ -15,6 +15,7 @@ WriteMakefile(
         'Linux::Event'       => '0.117',
         'Linux::Event::HTTP' => '0.004',
         'JSON::PP' => 0,
+        'Crypt::PK::Ed25519' => 0,
         'URI::Escape' => 0,
         'Time::HiRes' => 0,
     },
