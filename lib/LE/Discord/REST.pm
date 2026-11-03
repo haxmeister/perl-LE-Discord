@@ -16,8 +16,14 @@ my $BASE = 'https://discord.com/api/v10';
 
 sub new ($class, %args) {
     my $loop = delete $args{loop};
+    my $auth_mode = delete($args{auth_mode}) // 'bot';
+    croak 'auth_mode must be bot or webhook'
+        unless $auth_mode eq 'bot' || $auth_mode eq 'webhook';
     my $token = delete $args{token} // croak 'token is required';
     croak 'token must not be empty' unless length $token;
+    my $max_queue = delete($args{max_queue}) // 256;
+    croak 'max_queue must be a positive integer'
+        unless $max_queue =~ /\A[1-9][0-9]*\z/;
     my $http = delete $args{http_client};
     my $owns_http = !$http;
     my $clock = delete($args{clock}) // sub { clock_gettime(CLOCK_MONOTONIC) };
@@ -41,7 +47,8 @@ sub new ($class, %args) {
         };
     }
     return bless {
-        http => $http, token => $token, clock => $clock,
+        http => $http, token => $token, auth_mode => $auth_mode,
+        max_queue => $max_queue, clock => $clock,
         schedule => $schedule, on_error => $on_error,
         queue => [], active => undef, wake => undef, wake_at => undef,
         disabled => 0, closed => 0, owns_http => $owns_http,
@@ -59,6 +66,9 @@ sub delete ($self, $route, %args) { $self->request('DELETE', $route, %args) }
 sub request ($self, $method, $route, %args) {
     croak 'REST client is shut down' if $self->{closed};
     croak 'invalid HTTP method' unless $method =~ /\A(?:GET|POST|PUT|PATCH|DELETE)\z/;
+    croak 'webhook credentials only permit webhook-token routes'
+        if $self->{auth_mode} eq 'webhook'
+            && $route !~ m{\A/webhooks/\{webhook\.id\}/\{webhook\.token\}(?:/|\z)};
     croak 'route must be an absolute API path without query or fragment'
         unless defined($route) && $route =~ m{\A/} && $route !~ /[?#]/;
     my @names = ($route =~ /\{([A-Za-z][A-Za-z0-9_.]*)\}/g);
@@ -103,6 +113,8 @@ sub request ($self, $method, $route, %args) {
     croak 'timeout must be a positive number'
         unless $timeout =~ /\A(?:\d+(?:\.\d*)?|\.\d+)\z/ && $timeout > 0;
     my $major = _major($route, \%values);
+    croak 'REST request queue is full'
+        if @{ $self->{queue} } >= $self->{max_queue};
     my $req = bless {
         rest => $self, state => 'queued', cancelled => 0,
         method => $method, route => $route,
@@ -225,11 +237,12 @@ sub _cancel_queued ($self, $req) {
 
 sub _dispatch ($self, $req) {
     my @headers = (
-        ['Authorization', 'Bot ' . $self->{token}],
         ['Accept', 'application/json'],
         ['Accept-Encoding', 'identity'],
         ['User-Agent', 'LE-Discord/0.001'],
     );
+    push @headers, ['Authorization', 'Bot ' . $self->{token}]
+        if $self->{auth_mode} eq 'bot';
     push @headers, ['Content-Type', 'application/json'] if defined $req->{body};
     my %http_args = (
         method => $req->{method}, url => $req->{url},
@@ -315,9 +328,11 @@ sub _finish ($self, $req) {
         }
         if ($status == 401) { $self->{disabled} = 1 }
         if ($status < 200 || $status >= 300) {
+            my $message = ref($data) eq 'HASH'
+                ? ($data->{message} // 'request rejected') : 'request rejected';
+            $message =~ s/\Q$self->{token}\E/[REDACTED]/g;
             $error = LE::Discord::Error->new(
-                kind => 'http', status => $status,
-                message => ref($data) eq 'HASH' ? ($data->{message} // 'request rejected') : 'request rejected',
+                kind => 'http', status => $status, message => $message,
             );
         } elsif (!$valid_json) {
             $error = LE::Discord::Error->new(
@@ -386,7 +401,8 @@ receives an L<Uniform::HTTP> object. Requests return a handle with
 C<cancel>, C<state> and C<is_terminal>.
 
 The initial scheduler permits one active HTTP request per client and
-queues the rest. It observes Discord bucket and reset headers, limits
+queues up to 256 more by default (configure C<max_queue> at construction
+time). A full queue rejects new requests rather than growing forever. It observes Discord bucket and reset headers, limits
 global submission bursts, and retries explicit 429s at most twice using
 the reported delay. Transport failures are never automatically retried.
 A 401 disables new requests from this client.
@@ -403,7 +419,8 @@ nothing. Requests made after shutdown are rejected.
 
 This MVP supports JSON requests only. It does not yet implement file
 uploads, streaming responses, OAuth2 tokens, webhook-specific auth or
-bucket-parallel dispatch. It is not a complete Discord SDK. The
+bucket-parallel dispatch. Webhook-token authenticated calls are available
+through L<LE::Discord::Webhook>. It is not a complete Discord SDK. The
 rate-limit scheduler deliberately serializes all requests until the
 concurrent scheduler has been separately verified.
 
