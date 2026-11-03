@@ -74,3 +74,26 @@ also been verified against a real Discord webhook.
 See [Webhook management](docs/WEBHOOK-MANAGEMENT.md). Work on batching
 Vendetta Online player-sighting notifications is recorded as a future
 idea in [webhook notes](docs/WEBHOOKS.md), not implemented yet.
+
+## Receiving Discord webhook events (feature branch)
+
+The `feature/webhook-events` branch adds a small
+`LE::Discord::Webhook::Events` request handler for Discord-to-application
+webhook event POSTs. It verifies Ed25519 signatures using the
+application public key and accepts signed PINGs and events via
+`Linux::Event::HTTP::Server`.
+
+Run `perl -Ilib examples/webhook_events_local_test.pl` to test the
+receiver against a real localhost Linux::Event HTTP server and client.
+CryptX is a required dependency of LE::Discord, installed with the
+rest of the distribution. See [webhook-event receiver](docs/WEBHOOK-EVENTS.md).
+This is separate
+from sending to a webhook URL and from interaction webhooks.
+
+## Direct HTTPS webhook-event verification
+
+A public HTTPS endpoint can be served directly by Linux::Event, without
+a reverse proxy. The `examples/webhook_events_https.pl` example uses
+`Linux::Event::HTTP::Server` with a trusted TLS certificate and
+explicit bind address. See [direct HTTPS setup](docs/WEBHOOK-EVENTS.md)
+for the certificate, port-forwarding, and Discord Developer Portal steps.

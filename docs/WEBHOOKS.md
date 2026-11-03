@@ -84,7 +84,7 @@ not discard distinct sightings. **Idea only; not part of this release.**
 
 ## Later webhook work
 
-- Receiving Discord webhook events using Linux::Event::HTTP::Server and signature verification.
+- Discord webhook event receiver is implemented on `feature/webhook-events` with signature verification and PING handling. See [webhook-event receiver](WEBHOOK-EVENTS.md). Public HTTPS/live verification remains.
 - Interaction webhooks for slash commands and other interactions.
 - Multipart file uploads and attachment support.
 
