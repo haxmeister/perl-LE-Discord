@@ -391,6 +391,14 @@ global submission bursts, and retries explicit 429s at most twice using
 the reported delay. Transport failures are never automatically retried.
 A 401 disables new requests from this client.
 
+=head1 SHUTTING DOWN
+
+Call C<$discord-E<gt>rest-E<gt>shutdown> when you no longer need the REST
+client. This cancels pending and active operations, stops wakeup timers,
+and releases an HTTP client created by LE::Discord. A caller-supplied
+HTTP client remains owned by its caller. Repeated shutdown calls do
+nothing. Requests made after shutdown are rejected.
+
 =head1 LIMITATIONS
 
 This MVP supports JSON requests only. It does not yet implement file

@@ -410,4 +410,39 @@ sub fixture {
     ok($pending->is_terminal, 'blocked request terminal');
 }
 
+
+{
+    package T::DelayedCancelOperation;
+    use v5.36;
+    sub cancel ($self) { $self->{cancel_requested} = 1 }
+}
+{
+    my ($d, $http) = fixture();
+    my ($error, $success);
+    my $request = $d->rest->get('/users/@me',
+        on_response => sub { $success++ },
+        on_error => sub ($e) { $error = $e });
+    bless $http->{pending}[0], 'T::DelayedCancelOperation';
+    $request->cancel;
+    is($request->state, 'active',
+        'cancelled request remains active until delayed HTTP finish');
+    $http->complete(200, '{"id":"delayed"}');
+    is($error->kind, 'cancelled', 'late HTTP response cannot override cancellation');
+    ok(!$success, 'cancelled operation never delivers success');
+    ok($request->is_terminal, 'delayed cancellation eventually terminates');
+}
+{
+    my ($d, $http) = fixture();
+    my $error;
+    {
+        no warnings 'redefine';
+        local *T::HTTP::request = sub { die "fake request construction error"; };
+        my $req = $d->rest->get('/users/@me',
+            on_error => sub ($e) { $error = $e });
+        is($error->kind, 'transport', 'synchronous HTTP startup error is delivered');
+        ok($req->is_terminal, 'HTTP startup failure terminates request');
+        ok(!defined $d->rest->{active}, 'startup failure frees active slot');
+    }
+}
+
 done_testing();

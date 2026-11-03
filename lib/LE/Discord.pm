@@ -50,6 +50,7 @@ LE::Discord - Asynchronous Discord client for Linux::Event
         },
     );
     $loop->run;
+    $discord->rest->shutdown;
 
 =head1 DESCRIPTION
 

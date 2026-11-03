@@ -39,3 +39,4 @@ $discord->rest->get('/users/@me',
     },
 );
 $loop->run;
+$discord->rest->shutdown;
