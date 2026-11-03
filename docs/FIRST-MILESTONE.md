@@ -1,8 +1,8 @@
 # First milestone: real Discord REST connection
 
-**Status: proposal for discussion, not implemented.**
+**Status: REST MVP live smoke test completed on 2026-11-02. `GET /users/@me` authenticated and `POST /channels/{channel.id}/messages` created a message. On 2026-11-02, 83 offline tests passed in GitHub Actions, including queued/active cancellation, rate limits, shutdown, and delayed HTTP completion. Live shutdown and extended operation remain unverified.**
 
-## Decision proposed: REST first
+## Decision: REST first
 
 The shortest meaningful live-Discord test is an **outbound-only bot** that authenticates with a bot token, retrieves its identity, and posts a message into a test channel. This exercises real bot authentication, HTTPS, asynchronous request/response, JSON, Snowflake IDs, and a Discord message response.
 
@@ -41,50 +41,46 @@ No Message Content privileged intent is needed merely to send a message via REST
 
 For repeated manual tests, make sending deliberate (explicit `send` command or explicit channel configuration), not a message sent automatically on every module load. Avoid uncontrolled posting on startup or after reconnect.
 
-## Proposed minimal implementation
+## First implementation
 
 - `LE::Discord`: stores the Loop and bot token, without creating its own Loop.
-- `LE::Discord::REST` (internal): one nonblocking HTTP request path backed by `Linux::Event::HTTP::Client`.
-- One **example** (`examples/rest_hello.pl`, proposed), using the same Loop, first `get_current_user`, then `create_message` or a convenience `send_message`.
+- `LE::Discord::REST`: documented-route GET/POST/PUT/PATCH/DELETE, backed by `Linux::Event::HTTP::Client`, with named placeholders.
+- `examples/rest_hello.pl`: `GET /users/@me` followed by an optional explicit `POST /channels/{channel.id}/messages`.
 - JSON encode/decode, request headers, explicit HTTP statuses and errors; no silent synchronous HTTP calls.
 - Preserve received Snowflakes as decimal strings. Raw hashes are sufficient for milestone one; object classes are not required to prove the transport.
 - Carefully separate HTTP status failures (401, 403, 404, 429, 5xx) from connection/TLS errors. 401 should fail closed; 403 should explain permission failure; 429 must respect `Retry-After` or the JSON `retry_after` and must not loop aggressively.
-- A single serial request chain is enough for the first experiment. Comprehensive bucket-aware queueing belongs in the subsequent REST reliability milestone before adding wide concurrent REST usage.
+- The first implementation uses a single in-flight request and a FIFO queue with response-driven bucket waits, a conservative global submission budget, and bounded 429 retries. Concurrent bucket scheduling remains a later milestone.
 - Keep the bot token out of logs, error bodies where possible, and test fixtures.
 
-**Illustrative application-facing shape (NOT implemented):**
+**Application-facing interface implemented on the feature branch (live-verified for a message POST):**
 
 ```perl
-my $bot = LE::Discord->new(
-    loop  => $loop,
-    token => $ENV{DISCORD_BOT_TOKEN},
-);
-
-$bot->get_current_user(
-    on_response => sub ($user) {
-        say "Authenticated as ", $user->{username};
-        $bot->send_message(
-            channel_id => $ENV{DISCORD_CHANNEL_ID},
-            content    => "Hello from LE::Discord",
-            on_response => sub ($message) {
-                say "Sent message ", $message->{id};
-                $loop->stop;
-            },
-            on_error => sub ($error) {
-                warn "$error\n";
-                $loop->stop;
-            },
-        );
+$discord->rest->post(
+    '/channels/{channel.id}/messages',
+    'channel.id' => $ENV{DISCORD_CHANNEL_ID},
+    json => { content => 'Hello from LE::Discord' },
+    on_response => sub ($message) {
+        say "Sent message $message->{id}";
+        $loop->stop;
     },
     on_error => sub ($error) {
         warn "$error\n";
         $loop->stop;
     },
 );
-$loop->run;
 ```
 
-Callback conventions and method names remain provisional until we check `Linux::Event::HTTP::Client` directly.
+Callback conventions were checked against the current `Linux::Event::HTTP::Client` source; this implementation uses its completed `on_response` and terminal `on_finish` semantics.
+
+## Live smoke-test results (2026-11-02)
+
+Using the developer's local Linux installation and test bot:
+
+- `perl -Ilib examples/rest_hello.pl identify`: authenticated and returned the bot's username and Snowflake ID.
+- `perl -Ilib examples/rest_hello.pl send`: authenticated, submitted a channel message, and received a created Message ID and the expected destination channel ID.
+- An initial `HTTP 403 Missing Access` was resolved through Discord server/channel access configuration; the same command then succeeded.
+
+The bot token and private test configuration are not stored in this repository. This confirms the basic end-to-end HTTPS and JSON REST path; it does not independently validate rate-limit exhaustion, parallel request handling, shutdown/cleanup, or the Gateway.
 
 ## Tests and completion criteria
 
@@ -102,9 +98,9 @@ Callback conventions and method names remain provisional until we check `Linux::
 
 **Conveniences and coverage:** lightweight User/Message/Channel/Guild/Interaction objects, async reply helpers, pinned OpenAPI generation experiments, more endpoints. Only extract generic Linux::Event components when there is a demonstrated second user.
 
-## Open design choice for discussion
+## Chosen first program
 
-Should the first visible output be a one-shot **send-and-exit** program (recommended), or a running periodic notification bot? One-shot is safer, smaller, and a sufficient live API proof; continuous scheduling can follow after the REST transport is stable.
+The example is a one-shot, send-and-exit program. It sends only with the explicit `send` command. It calls `shutdown` after the event loop returns. Longer-running notification bots can follow separately.
 
 ## Relevant docs
 
@@ -113,3 +109,5 @@ Should the first visible output be a one-shot **send-and-exit** program (recomme
 - https://docs.discord.com/developers/resources/message
 - https://docs.discord.com/developers/topics/rate-limits
 - https://docs.discord.com/developers/events/gateway
+
+For the current implementation and deferred work, see [REST-DESIGN.md](REST-DESIGN.md).

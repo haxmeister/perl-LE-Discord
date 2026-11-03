@@ -1,0 +1,14 @@
+name: Perl offline tests
+on:
+  push:
+    branches: [feature/rest-mvp-foundation]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install URI dependency
+        run: sudo apt-get update && sudo apt-get install -y liburi-perl
+      - name: Run offline tests without credentials
+        run: prove -lr t
