@@ -161,4 +161,38 @@ sub send_to {
     like($@, qr/on_event callback is required/, 'callback required');
 }
 
+
+{
+    my ($ping_count, $event_count) = (0, 0);
+    my ($receiver, $loop, $events) = fixture(
+        on_ping => sub ($payload) {
+            ++$ping_count;
+            is($payload->{application_id}, $app_id,
+               'verified PING callback receives signed application metadata');
+        },
+    );
+    is(send_to($receiver, request())->{status}, 204,
+       'signed PING is acknowledged before callback');
+    is($ping_count, 0, 'PING callback is not invoked inside HTTP handler');
+    is(scalar @{$loop->{queue}}, 1, 'verified PING callback deferred');
+    $loop->flush;
+    is($ping_count, 1, 'verified PING callback runs after acknowledgement');
+    is(scalar @$events, 0, 'PING is not dispatched as an application event');
+
+    is(send_to($receiver, request(signature => ('00' x 64)))->{status},
+       401, 'invalid PING signature rejected');
+    is($ping_count, 1, 'invalid PING never invokes callback');
+    is(scalar @{$loop->{queue}}, 0,
+       'invalid PING does not enqueue logging callback');
+    $receiver = undef;
+}
+{
+    eval { LE::Discord::Webhook::Events->new(
+        loop => EventTest::Loop->new,
+        public_key => $key, on_event => sub {}, on_ping => 'print',
+    ) };
+    like($@, qr/on_ping must be a coderef/,
+       'rejects noncallback PING handler');
+}
+
 done_testing();
