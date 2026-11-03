@@ -61,4 +61,4 @@ $webhook->execute(
 );
 ```
 
-It reuses the REST rate-limit scheduler and defaults to Discord's `wait=true` confirmation mode. This feature has not yet been tested against a live webhook. See [webhook design and setup](docs/WEBHOOKS.md) for the current scope, credentials, and future Discord-to-application events.
+It reuses the REST rate-limit scheduler and defaults to Discord's `wait=true` confirmation mode. A live webhook send was confirmed on November 2, 2026. See [webhook design and setup](docs/WEBHOOKS.md) for the current scope, credentials, and future Discord-to-application events.

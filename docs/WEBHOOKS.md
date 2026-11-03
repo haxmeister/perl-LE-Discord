@@ -45,6 +45,21 @@ The webhook sender delegates to the same LE::Discord::REST queue and timer-based
 - For messages originating from untrusted strings, consider allowed_mentions => { parse => [] } to avoid unintentionally mentioning many users.
 - Discord warns against repeatedly retrying webhook URLs that return HTTP 404. The sender now disables further dispatch after a webhook 404 (or HTTP 401) to prevent an invalid-request storm. Use a fresh Webhook object after correcting or replacing the URL.
 
+## Live verification
+
+On November 2, 2026, the developer confirmed that
+`perl -Ilib examples/webhook_hello.pl` successfully sent a message
+through an actual Discord webhook. The webhook URL and token remain
+local and are not included in the repository.
+
+The existing fake-transport suites pass in GitHub Actions (121 tests
+before this documentation change). These tests cover webhook
+authentication separation, queueing, response header-based throttling,
+bounded HTTP 429 retries, cancellation, and invalid webhook handling.
+
+This initial live smoke test does not establish high-volume rate-limit
+behavior, cross-process coordination, or incoming event handling.
+
 ## Later webhook work
 
 - Bot-authenticated webhook management (create, inspect, edit, delete).
