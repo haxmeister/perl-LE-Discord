@@ -43,6 +43,7 @@ The webhook sender delegates to the same LE::Discord::REST queue and timer-based
 - The current scheduler sends one request at a time. The queue is bounded (256 pending requests by default; configure max_queue when constructing the Webhook object).
 - Reuse the same Webhook object for repeated sends. Creating separate objects or processes for the same webhook gives each an independent rate limiter. Applications sharing an IP address or webhook can still encounter 429 responses.
 - For messages originating from untrusted strings, consider allowed_mentions => { parse => [] } to avoid unintentionally mentioning many users.
+- Discord warns against repeatedly retrying webhook URLs that return HTTP 404. The sender now disables further dispatch after a webhook 404 (or HTTP 401) to prevent an invalid-request storm. Use a fresh Webhook object after correcting or replacing the URL.
 
 ## Later webhook work
 

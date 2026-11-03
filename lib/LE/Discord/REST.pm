@@ -192,7 +192,10 @@ sub _pump ($self) {
         if ($self->{disabled}) {
             shift @{ $self->{queue} };
             $self->_deliver($req, undef, LE::Discord::Error->new(
-                kind => 'authentication', message => 'bot token was rejected'));
+                kind => $self->{auth_mode} eq 'webhook' ? 'webhook' : 'authentication',
+                message => $self->{auth_mode} eq 'webhook'
+                    ? 'webhook credential is no longer usable'
+                    : 'bot token was rejected'));
             next;
         }
         my $now = $self->{clock}->();
@@ -326,7 +329,11 @@ sub _finish ($self, $req) {
                 }
             }
         }
-        if ($status == 401) { $self->{disabled} = 1 }
+        # Discord explicitly warns not to keep sending to a 404 webhook.
+        # Stop this sender from accumulating invalid requests.
+        if ($status == 401 || ($status == 404 && $self->{auth_mode} eq 'webhook')) {
+            $self->{disabled} = 1;
+        }
         if ($status < 200 || $status >= 300) {
             my $message = ref($data) eq 'HASH'
                 ? ($data->{message} // 'request rejected') : 'request rejected';

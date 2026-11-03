@@ -220,4 +220,23 @@ sub fixture {
     $w->shutdown;
 }
 
+
+{
+    my ($w, $http) = fixture();
+    my ($first, $blocked);
+    $w->execute(json => { content => 'invalid webhook' },
+        on_error => sub ($e) { $first = $e });
+    $w->execute(json => { content => 'must not send' },
+        on_error => sub ($e) { $blocked = $e });
+    $http->complete(404, '{"message":"Unknown Webhook"}');
+    is($first->status, 404, 'invalid webhook reports original 404');
+    is($blocked->kind, 'webhook', 'subsequent queued send fails closed');
+    is(scalar @{ $http->{calls} }, 1, 'no repeated HTTP calls to invalid webhook');
+    my $later;
+    $w->execute(json => { content => 'after failure' },
+        on_error => sub ($e) { $later = $e });
+    is($later->kind, 'webhook', 'new sends fail closed on disabled sender');
+    is(scalar @{ $http->{calls} }, 1, 'no invalid webhook retry storm');
+    $w->shutdown;
+}
 done_testing();
