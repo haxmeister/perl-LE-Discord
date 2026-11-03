@@ -122,6 +122,20 @@ Never print or commit a webhook URL or token. The fake-transport
 tests exercise these paths without needing real credentials. The
 safe `examples/webhook_inspect.pl` example only retrieves metadata.
 
+## Verification
+
+On November 2, 2026, the developer ran
+`perl -Ilib examples/webhook_inspect.pl` against a real Discord
+webhook and confirmed that it returned the expected webhook metadata.
+This uses token-authorized GET without an installed bot and does
+not change the webhook or send a message.
+
+The offline bot REST and webhook suites also pass (163 assertions).
+Creating, modifying, and deleting webhooks and editing/deleting webhook
+messages have been verified with fake HTTP responses, not yet against
+live Discord. Those actions can change or delete real data, so do not
+run them as an automatic smoke test.
+
 ## Roadmap
 
 Receiving Discord's outgoing webhook events, interaction callbacks,

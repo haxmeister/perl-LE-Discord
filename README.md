@@ -68,7 +68,8 @@ It reuses the REST rate-limit scheduler and defaults to Discord's `wait=true` co
 Bot REST routes already support webhook creation, listing, inspection,
 modification, and deletion, subject to Discord permissions. Token-based
 webhook inspection and message editing/deletion are available through
-`LE::Discord::Webhook` on the `feature/webhook-management` branch.
+`LE::Discord::Webhook`. The read-only webhook-inspection example has
+also been verified against a real Discord webhook.
 
 See [Webhook management](docs/WEBHOOK-MANAGEMENT.md). Work on batching
 Vendetta Online player-sighting notifications is recorded as a future
