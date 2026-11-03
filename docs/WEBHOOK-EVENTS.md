@@ -3,6 +3,12 @@
 Discord webhook events are sent **from Discord to your application**.
 This differs from sending messages **into Discord** using a webhook URL.
 
+Only certain Discord events can be subscribed to this way, such as
+application authorization changes and entitlement events. It is **not**
+a replacement for Gateway events such as regular guild message events.
+For those, LE::Discord will still need Gateway support.
+
+
 ## Protocol requirements
 
 - Configure a publicly accessible HTTPS endpoint on the Discord Developer
