@@ -239,4 +239,111 @@ sub fixture {
     is(scalar @{ $http->{calls} }, 1, 'no invalid webhook retry storm');
     $w->shutdown;
 }
+
+# Credential-scoped webhook and message management, no Bot auth header.
+{
+    my ($w, $http) = fixture();
+    my $details;
+    my $req = $w->get('', on_response => sub ($data) { $details = $data });
+    is($req->state, 'active', 'inspect webhook returns operation');
+    is($http->{calls}[0]{method}, 'GET', 'inspect webhook sends GET');
+    is($http->{calls}[0]{url},
+        "https://discord.com/api/v10/webhooks/$id/$secret",
+        'inspect webhook uses webhook-token route');
+    my %h = map { lc($_->[0]) => $_->[1] } @{ $http->{calls}[0]{headers} };
+    ok(!exists $h{authorization}, 'no bot auth for webhook inspect');
+    $http->complete(200, '{"id":"111111111111111111","name":"Announcements"}');
+    is($details->{name}, 'Announcements', 'inspect metadata decoded');
+
+    my $updated;
+    $w->patch('',
+        json => { name => 'Announcements 2' },
+        on_response => sub ($data) { $updated = $data });
+    is($http->{calls}[1]{method}, 'PATCH', 'token can edit own webhook');
+    like($http->{calls}[1]{body}, qr/"name":"Announcements 2"/,
+        'metadata patch JSON encoded');
+    $http->complete(200, '{"name":"Announcements 2"}');
+    is($updated->{name}, 'Announcements 2', 'metadata updated');
+
+    my $deleted = 'not yet';
+    $w->delete('', on_response => sub ($data) { $deleted = $data });
+    is($http->{calls}[2]{method}, 'DELETE', 'token can delete own webhook');
+    $http->complete(204, '');
+    ok(!defined $deleted, 'deleting webhook yields no body');
+    $w->shutdown;
+}
+{
+    my ($w, $http) = fixture();
+    my $message;
+    $w->get('/messages/{message.id}',
+        'message.id' => '222222222222222222',
+        query => { thread_id => '333333333333333333' },
+        on_response => sub ($data) { $message = $data });
+    is($http->{calls}[0]{url},
+        "https://discord.com/api/v10/webhooks/$id/$secret/messages/222222222222222222?thread_id=333333333333333333",
+        'get own message supports thread_id');
+    $http->complete(200, '{"id":"222222222222222222","content":"Before"}');
+    is($message->{content}, 'Before', 'message fetched');
+
+    my $edited;
+    $w->patch('/messages/{message.id}',
+        'message.id' => '222222222222222222',
+        json => {
+            content => 'After',
+            allowed_mentions => { parse => [] },
+        },
+        on_response => sub ($data) { $edited = $data });
+    is($http->{calls}[1]{method}, 'PATCH', 'edit own message uses PATCH');
+    like($http->{calls}[1]{body}, qr/"content":"After"/, 'edit content encoded');
+    like($http->{calls}[1]{body}, qr/"allowed_mentions":\{"parse":\[\]\}/,
+        'allowed_mentions retained in edit');
+    $http->complete(200, '{"id":"222222222222222222","content":"After"}');
+    is($edited->{content}, 'After', 'message edit returned');
+
+    my $deleted = 'not yet';
+    $w->delete('/messages/{message.id}',
+        'message.id' => '222222222222222222',
+        on_response => sub ($data) { $deleted = $data });
+    is($http->{calls}[2]{method}, 'DELETE', 'delete own message uses DELETE');
+    $http->complete(204, '');
+    ok(!defined $deleted, 'delete message returns no response body');
+    $w->shutdown;
+}
+{
+    my ($w, $http) = fixture();
+    eval { $w->get('/channels/{channel.id}', 'channel.id' => '5') };
+    like($@, qr/invalid webhook-token route/,
+        'token sender cannot access unrelated API routes');
+    eval { $w->get('/messages/5') };
+    like($@, qr/invalid webhook-token route/,
+        'token message route requires documented template');
+    eval { $w->get('', 'webhook.token' => 'wrong') };
+    like($@, qr/webhook credentials cannot be overridden/,
+        'cannot substitute webhook token through route arguments');
+    eval { $w->execute(
+        json => { content => 'Hello' },
+        'webhook.token' => 'wrong',
+    ) };
+    like($@, qr/webhook credentials cannot be overridden/,
+        'execute cannot override webhook token');
+    is(scalar @{ $http->{calls} }, 0,
+        'invalid operations rejected before HTTP dispatch');
+    $w->shutdown;
+}
+{
+    my ($w, $http) = fixture();
+    my ($missing, $sent);
+    $w->get('/messages/{message.id}', 'message.id' => 'not-found',
+        on_error => sub ($e) { $missing = $e });
+    $http->complete(404, '{"message":"Unknown Message"}');
+    is($missing->status, 404, 'missing message returns 404');
+    $w->execute(json => { content => 'Webhook still works' },
+        on_response => sub ($data) { $sent = $data });
+    is(scalar @{ $http->{calls} }, 2,
+        'missing message does not disable otherwise valid webhook');
+    $http->complete(200, '{"id":"new-message"}');
+    is($sent->{id}, 'new-message', 'webhook send still succeeds after message 404');
+    $w->shutdown;
+}
+
 done_testing();
