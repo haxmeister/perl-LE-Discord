@@ -44,3 +44,16 @@ References:
 - https://docs.discord.com/developers/topics/rate-limits
 - https://docs.discord.com/developers/resources/message
 - https://github.com/haxmeister/perl-Linux-Event-HTTP/blob/main/lib/Linux/Event/HTTP/Client.pm
+
+## Shutdown and ownership
+
+`$discord->rest->shutdown` cancels the internal wakeup timer, reports
+cancellation for queued requests, cancels the active request, and stops
+accepting new work. It is idempotent. Only a `Linux::Event::HTTP::Client`
+created by LE::Discord is shut down; a supplied `http_client` remains
+owned by its caller. This is deliberate, because it may be shared.
+
+An individual request handle can be cancelled at any point. Terminal
+handles retain their terminal state, but discard references to REST, the
+original URL and JSON body, and callbacks. Cancelled and completed
+requests should therefore not keep the entire client alive.

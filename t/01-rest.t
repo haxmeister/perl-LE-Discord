@@ -365,4 +365,49 @@ sub fixture {
     like($warnings[0], qr/\[REDACTED\]/, 'redaction marker is present');
 }
 
+
+{
+    my ($d, $http) = fixture();
+    my ($active_error, $queued_error);
+    my $active = $d->rest->post('/channels/{channel.id}/messages',
+        'channel.id' => 111, json => { content => 'drop me' },
+        on_error => sub ($e) { $active_error = $e });
+    my $queued = $d->rest->get('/users/@me',
+        on_error => sub ($e) { $queued_error = $e });
+    my $rest = $d->rest;
+    is($active->state, 'active', 'active request before shutdown');
+    is($queued->state, 'queued', 'queued request before shutdown');
+    $rest->shutdown;
+    is($active_error->kind, 'cancelled', 'shutdown cancels active request');
+    is($queued_error->kind, 'cancelled', 'shutdown cancels queued request');
+    ok($active->is_terminal && $queued->is_terminal,
+        'both requests terminal after synchronous fake cancellation');
+    is(scalar @{ $http->{calls} }, 1, 'shutdown does not send queued request');
+    is(scalar @{ $rest->{queue} }, 0, 'shutdown clears pending queue');
+    ok(!defined $active->{rest} && !defined $queued->{rest},
+        'terminal handles detach REST ownership');
+    ok(!exists $active->{body}, 'terminal request releases JSON body');
+    $rest->shutdown;
+    eval { $rest->get('/users/@me') };
+    like($@, qr/REST client is shut down/, 'no new work after shutdown');
+}
+{
+    my ($d, $http, $advance) = fixture();
+    my $error;
+    $d->rest->get('/users/@me', on_response => sub {});
+    $http->complete(200, '{"id":"123"}',
+        'X-RateLimit-Bucket' => 'stop-bucket',
+        'X-RateLimit-Remaining' => '0',
+        'X-RateLimit-Reset-After' => '20');
+    my $pending = $d->rest->get('/users/@me',
+        on_error => sub ($e) { $error = $e });
+    ok(defined $d->rest->{wake}, 'blocked request has wakeup timer');
+    $d->rest->shutdown;
+    is($error->kind, 'cancelled', 'shutdown cancels blocked request');
+    ok(!defined $d->rest->{wake}, 'shutdown clears wakeup timer');
+    $advance->(30);
+    is(scalar @{ $http->{calls} }, 1, 'cancelled timer never dispatches request');
+    ok($pending->is_terminal, 'blocked request terminal');
+}
+
 done_testing();

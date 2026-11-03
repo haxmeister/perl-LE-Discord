@@ -4,6 +4,7 @@ use Carp qw(croak);
 use JSON::PP ();
 use URI::Escape qw(uri_escape_utf8);
 use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
+use Scalar::Util qw(weaken);
 use LE::Discord::Error;
 use LE::Discord::REST::Request;
 
@@ -18,6 +19,7 @@ sub new ($class, %args) {
     my $token = delete $args{token} // croak 'token is required';
     croak 'token must not be empty' unless length $token;
     my $http = delete $args{http_client};
+    my $owns_http = !$http;
     my $clock = delete($args{clock}) // sub { clock_gettime(CLOCK_MONOTONIC) };
     my $schedule = delete $args{schedule};
     my $on_error = delete $args{on_error};
@@ -41,7 +43,8 @@ sub new ($class, %args) {
     return bless {
         http => $http, token => $token, clock => $clock,
         schedule => $schedule, on_error => $on_error,
-        queue => [], active => undef, wake => undef, wake_at => undef, disabled => 0,
+        queue => [], active => undef, wake => undef, wake_at => undef,
+        disabled => 0, closed => 0, owns_http => $owns_http,
         routes => {}, blocked_until => {}, global_until => 0,
         dispatched => [],
     }, $class;
@@ -54,6 +57,7 @@ sub patch  ($self, $route, %args) { $self->request('PATCH',  $route, %args) }
 sub delete ($self, $route, %args) { $self->request('DELETE', $route, %args) }
 
 sub request ($self, $method, $route, %args) {
+    croak 'REST client is shut down' if $self->{closed};
     croak 'invalid HTTP method' unless $method =~ /\A(?:GET|POST|PUT|PATCH|DELETE)\z/;
     croak 'route must be an absolute API path without query or fragment'
         unless defined($route) && $route =~ m{\A/} && $route !~ /[?#]/;
@@ -107,9 +111,29 @@ sub request ($self, $method, $route, %args) {
         on_response => $on_response, on_error => $on_error,
         attempts => 0,
     }, 'LE::Discord::REST::Request';
+    weaken($req->{rest});
     push @{ $self->{queue} }, $req;
     $self->_pump;
     return $req;
+}
+
+sub shutdown ($self) {
+    return if $self->{closed}++;
+    if (my $cancel = delete $self->{wake}) { $cancel->() }
+    delete $self->{wake_at};
+    my @queued = splice @{ $self->{queue} };
+    for my $req (@queued) {
+        $req->{cancelled} = 1;
+        $self->_deliver($req, undef, LE::Discord::Error->new(
+            kind => 'cancelled', message => 'REST client shut down'));
+    }
+    my $active = $self->{active};
+    $active->cancel if $active;
+    # Only shut down an HTTP client we created. An injected HTTP client
+    # may be shared by the application.
+    $self->{http}->shutdown
+        if $self->{owns_http} && $self->{http}->can('shutdown');
+    return;
 }
 
 sub _major ($route, $values) {
@@ -144,7 +168,7 @@ sub _delay ($self, $req, $now) {
 }
 
 sub _pump ($self) {
-    return if $self->{active};
+    return if $self->{closed} || $self->{active};
     while (@{ $self->{queue} }) {
         my $req = $self->{queue}[0];
         if ($req->{cancelled}) {
@@ -327,7 +351,9 @@ sub _deliver ($self, $req, $data, $error) {
     } elsif ($error) {
         warn "$error\n";
     }
-    delete @{$req}{qw(on_response on_error)};
+    # A completed request handle should not retain the REST client, HTTP
+    # transport or the original message body indefinitely.
+    delete @{$req}{qw(on_response on_error rest url body)};
 }
 
 1;
